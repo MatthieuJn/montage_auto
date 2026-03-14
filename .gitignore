@@ -1,0 +1,7 @@
+videos/
+*.MOV
+*.mov
+*.mp4
+*.MP4
+rapport_montage.html
+.claude/

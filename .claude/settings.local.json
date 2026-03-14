@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ffmpeg -i \"c:/Users/mjoua/OneDrive/Documents/papa podo/exp_montage/MVI_5493.MOV\" -vf \"fps=1/10,scale=640:-1\" \"c:/Users/mjoua/OneDrive/Documents/papa podo/exp_montage/frames/5493_%03d.jpg\" -y -loglevel error)",
+      "Bash(ffmpeg -i \"c:/Users/mjoua/OneDrive/Documents/papa podo/exp_montage/MVI_5497.MOV\" -vf \"fps=1/10,scale=640:-1\" \"c:/Users/mjoua/OneDrive/Documents/papa podo/exp_montage/frames/5497_%03d.jpg\" -y -loglevel error)",
+      "Bash(ffmpeg -f concat -safe 0 -i concat_list.txt -c copy \"montage_final.mp4\" -y -loglevel warning)",
+      "Bash(ffprobe -v quiet -show_entries format=duration,size -of default=noprint_wrappers=1 \"c:/Users/mjoua/OneDrive/Documents/papa podo/exp_montage/montage_final.mp4\")",
+      "Bash(python cut_silences.py)",
+      "Bash(python smart_edit.py)",
+      "Bash(python -c \"import google.generativeai; print\\(''OK''\\)\")",
+      "Bash(pip install:*)"
+    ]
+  }
+}

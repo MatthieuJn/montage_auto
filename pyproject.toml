@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "montage_auto"
+version = "0.1.0"
+description = "Automatic video montage: sort rushes and remove silences."
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "moviepy>=2.0.0",
+    "numpy>=1.21.0",
+]
+
+[project.scripts]
+montage_auto = "montage_auto._cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

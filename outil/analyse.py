@@ -2,12 +2,15 @@
 import os, sys, json, subprocess, webbrowser, requests, base64, time
 from pathlib import Path
 from datetime import datetime
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 VIDEO_EXTENSIONS = {".mov", ".mp4", ".avi", ".mkv", ".mts", ".m4v"}
 
-# ── Dossier videos = ../videos/ par rapport à ce script ─────────────
-BASE = Path(__file__).parent.parent / "videos"
+# ── Dossier videos = ../videos/ par rapport à ce script (ou passé en argument) ─
+BASE = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).parent.parent / "videos"
 # Exclure les fichiers générés par ce script (commençant par "montage_" ou "rapport_")
 videos = sorted([
     f for f in BASE.iterdir()
@@ -262,23 +265,29 @@ def build_html(order_data, file_analyses, all_transcripts, thumbnails):
         exclure.append(f)
         raisons[f] = "non classé par le LLM"
 
-    rows = ""
-    for i, fname in enumerate(ordre):
-        if fname not in file_analyses:
-            continue
-        dur = fmt_time(all_transcripts[fname]["duration"])
-        titre_fichier = titres.get(fname, "")
-        thumb_html = ""
-        if fname in thumbnails:
-            thumb_html = f'<img src="{thumbnails[fname]}" class="thumb" alt="apercu {fname}">'
+    # Tri chronologique de tous les fichiers
+    ordre_set = set(ordre)
+    exclure_set = set(exclure)
+    tous_tries = sorted(file_analyses.keys())
 
-        rows += f"""
+    kept_counter = 0
+    rows = ""
+    for fname in tous_tries:
+        if fname in ordre_set:
+            kept_counter += 1
+            dur = fmt_time(all_transcripts[fname]["duration"])
+            titre_fichier = titres.get(fname, "")
+            thumb_html = ""
+            if fname in thumbnails:
+                thumb_html = f'<img src="{thumbnails[fname]}" class="thumb" alt="apercu {fname}">'
+
+            rows += f"""
         <div class="video-block">
           <div class="video-header">
             {thumb_html}
             <div class="video-header-info">
               <div class="video-title-row">
-                <span class="order-badge">{i+1}</span>
+                <span class="order-badge">{kept_counter}</span>
                 <span class="video-name-block">
                   <strong>{fname}</strong>
                   {f'<span class="video-subtitle">{titre_fichier}</span>' if titre_fichier else ''}
@@ -290,13 +299,13 @@ def build_html(order_data, file_analyses, all_transcripts, thumbnails):
           <table class="segments-table">
             <thead><tr><th>Timestamps</th><th>Type</th><th>Plan</th><th>Lumière</th><th>Contenu</th><th>Texte transcrit</th></tr></thead>
             <tbody>"""
-        for seg in file_analyses[fname]:
-            bg, fg, icon = COLORS.get(seg["type"], ("#fff", "#000", ""))
-            t_start = fmt_time(seg["start"])
-            t_end   = fmt_time(seg["end"])
-            plan = seg.get("plan", "")
-            lum  = seg.get("luminosite", "")
-            rows += f"""
+            for seg in file_analyses[fname]:
+                bg, fg, icon = COLORS.get(seg["type"], ("#fff", "#000", ""))
+                t_start = fmt_time(seg["start"])
+                t_end   = fmt_time(seg["end"])
+                plan = seg.get("plan", "")
+                lum  = seg.get("luminosite", "")
+                rows += f"""
               <tr style="background:{bg};color:{fg}">
                 <td class="ts">{t_start} -> {t_end}</td>
                 <td class="type">{icon} {seg['type']}</td>
@@ -305,25 +314,43 @@ def build_html(order_data, file_analyses, all_transcripts, thumbnails):
                 <td><strong>{seg.get('contenu','')}</strong></td>
                 <td class="transcript">{seg.get('texte','')}</td>
               </tr>"""
-        rows += "</tbody></table></div>"
+            rows += "</tbody></table></div>"
 
-    # Section fichiers exclus
-    exclus_html = ""
-    if exclure:
-        exclus_html = '<h2 style="color:#721c24;margin-top:40px">🗑️ Fichiers à exclure du montage</h2>'
-        for fname in exclure:
-            raison = raisons.get(fname, "")
+        else:
+            # Vidéo exclue : encart avec transcript inline
+            raison = raisons.get(fname, "non retenu")
+            dur = fmt_time(all_transcripts[fname]["duration"])
             thumb_html = ""
             if fname in thumbnails:
-                thumb_html = f'<img src="{thumbnails[fname]}" class="thumb-small" alt="apercu {fname}">'
-            exclus_html += f"""
-        <div class="exclu-block">
-          {thumb_html}
-          <div class="exclu-info">
-            <strong>{fname}</strong>
-            <span class="exclu-raison">{raison}</span>
+                thumb_html = f'<img src="{thumbnails[fname]}" class="thumb-exclu" alt="apercu {fname}">'
+            segs_html = ""
+            for seg in file_analyses.get(fname, []):
+                bg, fg, icon = COLORS.get(seg["type"], ("#fff", "#000", ""))
+                t_start = fmt_time(seg["start"])
+                t_end   = fmt_time(seg["end"])
+                segs_html += f"""
+              <tr style="background:{bg};color:{fg};opacity:0.75">
+                <td class="ts">{t_start} -> {t_end}</td>
+                <td class="type">{icon} {seg['type']}</td>
+                <td class="meta-cell">{seg.get('plan','')}</td>
+                <td class="meta-cell">{seg.get('luminosite','')}</td>
+                <td><strong>{seg.get('contenu','')}</strong></td>
+                <td class="transcript">{seg.get('texte','')}</td>
+              </tr>"""
+            rows += f"""
+        <div class="exclu-block-full">
+          <div class="exclu-header">
+            {thumb_html}
+            <div class="exclu-header-info">
+              <strong>{fname}</strong>
+              <span class="duration">{dur}</span>
+              <span class="exclu-raison">🗑️ À supprimer — {raison}</span>
+            </div>
           </div>
+          {f'<table class="segments-table"><thead><tr><th>Timestamps</th><th>Type</th><th>Plan</th><th>Lumière</th><th>Contenu</th><th>Texte transcrit</th></tr></thead><tbody>{segs_html}</tbody></table>' if segs_html else ''}
         </div>"""
+
+    exclus_html = ""
 
     now = datetime.now().strftime("%d/%m/%Y %H:%M")
     return f"""<!DOCTYPE html>
@@ -364,6 +391,11 @@ def build_html(order_data, file_analyses, all_transcripts, thumbnails):
   .exclu-info {{ display: flex; flex-direction: column; gap: 4px; }}
   .exclu-info strong {{ text-decoration: line-through; color: #721c24; }}
   .exclu-raison {{ color: #888; font-style: italic; font-size: 0.9em; }}
+  .exclu-block-full {{ background: #fff5f5; border-left: 4px solid #c00; border-radius: 6px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.1); overflow: hidden; }}
+  .exclu-header {{ display: flex; align-items: center; gap: 14px; padding: 10px 14px; background: #fce8e8; }}
+  .exclu-header strong {{ text-decoration: line-through; color: #721c24; font-size: 1em; }}
+  .exclu-header-info {{ display: flex; flex-direction: column; gap: 4px; flex: 1; }}
+  .thumb-exclu {{ width: 120px; min-width: 120px; height: 70px; object-fit: cover; border-radius: 3px; opacity: 0.75; border: 2px solid #c00; }}
 </style>
 </head>
 <body>
